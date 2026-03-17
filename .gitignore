@@ -259,3 +259,5 @@ poetry.toml
 
 # LSP config files
 pyrightconfig.json
+
+gunicorn.ctl
