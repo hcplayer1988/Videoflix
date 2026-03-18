@@ -51,16 +51,25 @@ def activate_user(user):
  
 def set_auth_cookies(response, access, refresh):
     """Sets httpOnly JWT cookies on the response."""
-    cookie_settings = {
-        "httponly": True,
-        "secure": True,
-        "samesite": "Lax",
-    }
+    cookie_settings = {"httponly": True, "secure": True, "samesite": "Lax"}
     response.set_cookie("access_token", access, **cookie_settings)
-    response.set_cookie("refresh_token", refresh, **cookie_settings)
+    if refresh:
+        response.set_cookie("refresh_token", refresh, **cookie_settings)
  
  
 def delete_auth_cookies(response):
     """Deletes both auth cookies from the response."""
     response.delete_cookie("access_token")
     response.delete_cookie("refresh_token")
+ 
+ 
+def build_user_response(user):
+    """Builds the user data dict for login response."""
+    return {
+        "detail": "Login successful",
+        "user": {
+            "id": user.id,
+            "username": user.username,
+        }
+    }
+

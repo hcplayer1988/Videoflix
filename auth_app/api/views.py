@@ -6,14 +6,14 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.exceptions import TokenError
-from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
  
-from .serializers import RegistrationSerializer
+from .serializers import RegistrationSerializer, EmailTokenObtainPairSerializer
 from .utils import (
     generate_uid_and_token, send_activation_email, get_user_from_uid,
-    is_valid_activation_token, activate_user, set_auth_cookies, delete_auth_cookies,
+    is_valid_activation_token, activate_user, set_auth_cookies,
+    delete_auth_cookies, build_user_response,
 )
  
 User = get_user_model()
@@ -59,22 +59,19 @@ class ActivateView(APIView):
  
  
 class LoginView(TokenObtainPairView):
-    """Handles user login and sets JWT tokens as httpOnly cookies."""
+    """Handles user login via email and sets JWT tokens as httpOnly cookies."""
  
     permission_classes = [AllowAny]
-    serializer_class = TokenObtainPairSerializer
+    serializer_class = EmailTokenObtainPairSerializer
  
     def post(self, request, *args, **kwargs):
-        """Authenticates the user and sets access and refresh tokens as cookies."""
+        """Authenticates the user by email and sets access and refresh tokens as cookies."""
         response = super().post(request, *args, **kwargs)
         if response.status_code != 200:
             return response
-        user = User.objects.get(username=request.data.get("username"))
+        user = User.objects.get(email=request.data.get("email"))
         set_auth_cookies(response, response.data.get("access"), response.data.get("refresh"))
-        response.data = {
-            "detail": "Login successfully!",
-            "user": {"id": user.id, "username": user.username, "email": user.email},
-        }
+        response.data = build_user_response(user)
         return response
  
  
