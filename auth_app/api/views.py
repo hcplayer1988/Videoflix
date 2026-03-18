@@ -1,11 +1,6 @@
 """Views for authentication API endpoints."""
  
 from django.contrib.auth import get_user_model
-from django.contrib.auth.tokens import default_token_generator
-from django.utils.encoding import force_bytes
-from django.utils.http import urlsafe_base64_encode
-from django.core.mail import send_mail
-from django.conf import settings
 from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
@@ -16,6 +11,10 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
  
 from .serializers import RegistrationSerializer
+from .utils import (
+    generate_uid_and_token, send_activation_email, get_user_from_uid,
+    is_valid_activation_token, activate_user, set_auth_cookies, delete_auth_cookies,
+)
  
 User = get_user_model()
  
@@ -26,41 +25,37 @@ class RegisterView(APIView):
     permission_classes = [AllowAny]
  
     def post(self, request):
-        """
-        Creates a new inactive user account and sends an activation email.
- 
-        Returns 201 with user data and activation token on success.
-        Returns 400 if the provided data is invalid
-        (e.g. passwords do not match or email already exists).
-        """
+        """Creates a new inactive user and sends an activation email."""
         serializer = RegistrationSerializer(data=request.data)
-        if serializer.is_valid():
-            user = serializer.save()
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        user = serializer.save()
+        uid, token = generate_uid_and_token(user)
+        send_activation_email(user, uid, token)
+        return Response(
+            {"user": {"id": user.id, "email": user.email}, "token": token},
+            status=status.HTTP_201_CREATED
+        )
  
-            uid = urlsafe_base64_encode(force_bytes(user.pk))
-            token = default_token_generator.make_token(user)
  
-            activation_link = f"{settings.FRONTEND_URL}/activate/{uid}/{token}/"
+class ActivateView(APIView):
+    """Handles user account activation via email link."""
  
-            send_mail(
-                subject="Activate your Videoflix account",
-                message=f"Please activate your account by clicking the link below:\n\n{activation_link}",
-                from_email=settings.DEFAULT_FROM_EMAIL,
-                recipient_list=[user.email],
-                fail_silently=False,
-            )
+    permission_classes = [AllowAny]
  
+    def get(self, request, uidb64, token):
+        """Activates the user account if the token is valid."""
+        user = get_user_from_uid(uidb64)
+        if user is None or not is_valid_activation_token(user, token):
             return Response(
-                {
-                    "user": {
-                        "id": user.id,
-                        "email": user.email,
-                    },
-                    "token": token,
-                },
-                status=status.HTTP_201_CREATED
+                {"message": "Activation failed."},
+                status=status.HTTP_400_BAD_REQUEST
             )
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        activate_user(user)
+        return Response(
+            {"message": "Account successfully activated."},
+            status=status.HTTP_200_OK
+        )
  
  
 class LoginView(TokenObtainPairView):
@@ -70,45 +65,16 @@ class LoginView(TokenObtainPairView):
     serializer_class = TokenObtainPairSerializer
  
     def post(self, request, *args, **kwargs):
-        """
-        Authenticates the user and sets access and refresh tokens as
-        httpOnly cookies. Returns user data on success.
- 
-        Returns 200 with user info on success, 401 for invalid credentials,
-        400 if required fields are missing.
-        """
+        """Authenticates the user and sets access and refresh tokens as cookies."""
         response = super().post(request, *args, **kwargs)
- 
-        if response.status_code == 200:
-            access = response.data.get("access")
-            refresh = response.data.get("refresh")
- 
-            user = User.objects.get(username=request.data.get("username"))
- 
-            response.set_cookie(
-                key="access_token",
-                value=access,
-                httponly=True,
-                secure=True,
-                samesite="Lax"
-            )
-            response.set_cookie(
-                key="refresh_token",
-                value=refresh,
-                httponly=True,
-                secure=True,
-                samesite="Lax"
-            )
- 
-            response.data = {
-                "detail": "Login successfully!",
-                "user": {
-                    "id": user.id,
-                    "username": user.username,
-                    "email": user.email,
-                }
-            }
- 
+        if response.status_code != 200:
+            return response
+        user = User.objects.get(username=request.data.get("username"))
+        set_auth_cookies(response, response.data.get("access"), response.data.get("refresh"))
+        response.data = {
+            "detail": "Login successfully!",
+            "user": {"id": user.id, "username": user.username, "email": user.email},
+        }
         return response
  
  
@@ -118,36 +84,16 @@ class LogoutView(APIView):
     permission_classes = [IsAuthenticated]
  
     def post(self, request):
-        """
-        Blacklists the refresh token and deletes both auth cookies.
- 
-        Returns 200 on success, 401 if the refresh token is missing
-        or already invalid.
-        """
+        """Blacklists the refresh token and deletes both auth cookies."""
         refresh_token = request.COOKIES.get("refresh_token")
- 
         if refresh_token is None:
-            return Response(
-                {"detail": "Refresh token not found!"},
-                status=status.HTTP_401_UNAUTHORIZED
-            )
- 
+            return Response({"detail": "Refresh token not found!"}, status=status.HTTP_401_UNAUTHORIZED)
         try:
-            token = RefreshToken(refresh_token)
-            token.blacklist()
+            RefreshToken(refresh_token).blacklist()
         except TokenError:
-            return Response(
-                {"detail": "Token is invalid or already blacklisted!"},
-                status=status.HTTP_401_UNAUTHORIZED
-            )
- 
-        response = Response(
-            {"detail": "Log-Out successfully! All Tokens will be deleted. Refresh token is now invalid."},
-            status=status.HTTP_200_OK
-        )
-        response.delete_cookie("access_token")
-        response.delete_cookie("refresh_token")
- 
+            return Response({"detail": "Token is invalid or already blacklisted!"}, status=status.HTTP_401_UNAUTHORIZED)
+        response = Response({"detail": "Logout successfully!"}, status=status.HTTP_200_OK)
+        delete_auth_cookies(response)
         return response
  
  
@@ -155,51 +101,15 @@ class CookieTokenRefreshView(TokenRefreshView):
     """Handles access token renewal using the refresh token cookie."""
  
     def post(self, request, *args, **kwargs):
-        """
-        Reads the refresh token from cookies and issues a new access token.
- 
-        If token rotation is enabled, also sets a new refresh token cookie.
-        Returns 200 on success, 401 if the refresh token is missing or invalid.
-        """
+        """Issues a new access token using the refresh token from cookies."""
         refresh_token = request.COOKIES.get("refresh_token")
- 
         if refresh_token is None:
-            return Response(
-                {"detail": "Refresh token not found!"},
-                status=status.HTTP_401_UNAUTHORIZED
-            )
- 
+            return Response({"detail": "Refresh token not found!"}, status=status.HTTP_401_UNAUTHORIZED)
         serializer = self.get_serializer(data={"refresh": refresh_token})
- 
         try:
             serializer.is_valid(raise_exception=True)
         except TokenError:
-            return Response(
-                {"detail": "Refresh token invalid!"},
-                status=status.HTTP_401_UNAUTHORIZED
-            )
- 
-        access_token = serializer.validated_data.get("access")
-        new_refresh_token = serializer.validated_data.get("refresh")
- 
-        response = Response(
-            {"detail": "Token refreshed"},
-            status=status.HTTP_200_OK
-        )
-        response.set_cookie(
-            key="access_token",
-            value=access_token,
-            httponly=True,
-            secure=True,
-            samesite="Lax"
-        )
-        if new_refresh_token:
-            response.set_cookie(
-                key="refresh_token",
-                value=new_refresh_token,
-                httponly=True,
-                secure=True,
-                samesite="Lax"
-            )
- 
+            return Response({"detail": "Refresh token invalid!"}, status=status.HTTP_401_UNAUTHORIZED)
+        response = Response({"detail": "Token refreshed"}, status=status.HTTP_200_OK)
+        set_auth_cookies(response, serializer.validated_data.get("access"), serializer.validated_data.get("refresh"))
         return response
