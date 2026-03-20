@@ -41,6 +41,8 @@ INSTALLED_APPS = [
     'django_rq',
     'corsheaders',
     'auth_app',
+    'upload_app',
+    'content_app',
 ]
  
 MIDDLEWARE = [
