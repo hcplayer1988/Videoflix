@@ -29,6 +29,18 @@ def send_activation_email(user, uid, token):
     )
  
  
+def send_password_reset_email(user, uid, token):
+    """Sends a password reset email to the given user."""
+    reset_link = f"{settings.FRONTEND_URL}/pages/auth/confirm_password.html?uid={uid}&token={token}"
+    send_mail(
+        subject="Reset your Videoflix password",
+        message=f"Reset your password by clicking the link below:\n\n{reset_link}",
+        from_email=settings.DEFAULT_FROM_EMAIL,
+        recipient_list=[user.email],
+        fail_silently=False,
+    )
+ 
+ 
 def get_user_from_uid(uidb64):
     """Decodes uidb64 and returns the corresponding user or None."""
     try:

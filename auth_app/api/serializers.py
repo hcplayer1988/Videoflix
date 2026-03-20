@@ -65,3 +65,16 @@ class EmailTokenObtainPairSerializer(TokenObtainPairSerializer):
         except User.DoesNotExist:
             raise serializers.ValidationError('No account found with this email.')
         return super().validate(attrs)
+ 
+ 
+class PasswordConfirmSerializer(serializers.Serializer):
+    """Serializer for confirming a password reset."""
+ 
+    new_password = serializers.CharField(write_only=True)
+    confirm_password = serializers.CharField(write_only=True)
+ 
+    def validate(self, attrs):
+        """Validates that new_password and confirm_password match."""
+        if attrs.get('new_password') != attrs.get('confirm_password'):
+            raise serializers.ValidationError('Passwords do not match.')
+        return attrs

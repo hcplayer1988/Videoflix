@@ -9,11 +9,13 @@ from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
  
-from .serializers import RegistrationSerializer, EmailTokenObtainPairSerializer
+from .serializers import (
+    RegistrationSerializer, EmailTokenObtainPairSerializer, PasswordConfirmSerializer,
+)
 from .utils import (
-    generate_uid_and_token, send_activation_email, get_user_from_uid,
-    is_valid_activation_token, activate_user, set_auth_cookies,
-    delete_auth_cookies, build_user_response,
+    generate_uid_and_token, send_activation_email, send_password_reset_email,
+    get_user_from_uid, is_valid_activation_token, activate_user,
+    set_auth_cookies, delete_auth_cookies, build_user_response,
 )
  
 User = get_user_model()
@@ -84,14 +86,58 @@ class LogoutView(APIView):
         """Blacklists the refresh token and deletes both auth cookies."""
         refresh_token = request.COOKIES.get("refresh_token")
         if refresh_token is None:
-            return Response({"detail": "Refresh token not found!"}, status=status.HTTP_401_UNAUTHORIZED)
+            return Response({"detail": "Refresh token not found!"}, status=status.HTTP_400_BAD_REQUEST)
         try:
             RefreshToken(refresh_token).blacklist()
         except TokenError:
-            return Response({"detail": "Token is invalid or already blacklisted!"}, status=status.HTTP_401_UNAUTHORIZED)
-        response = Response({"detail": "Logout successfully!"}, status=status.HTTP_200_OK)
+            return Response({"detail": "Token is invalid or already blacklisted!"}, status=status.HTTP_400_BAD_REQUEST)
+        response = Response(
+            {"detail": "Logout successful! All tokens will be deleted. Refresh token is now invalid."},
+            status=status.HTTP_200_OK
+        )
         delete_auth_cookies(response)
         return response
+ 
+ 
+class PasswordResetView(APIView):
+    """Handles password reset requests."""
+ 
+    permission_classes = [AllowAny]
+ 
+    def post(self, request):
+        """Sends a password reset email if the user exists."""
+        email = request.data.get("email")
+        try:
+            user = User.objects.get(email=email)
+            uid, token = generate_uid_and_token(user)
+            send_password_reset_email(user, uid, token)
+        except User.DoesNotExist:
+            pass
+        return Response(
+            {"detail": "An email has been sent to reset your password."},
+            status=status.HTTP_200_OK
+        )
+ 
+ 
+class PasswordConfirmView(APIView):
+    """Handles password reset confirmation."""
+ 
+    permission_classes = [AllowAny]
+ 
+    def post(self, request, uidb64, token):
+        """Validates the token and sets the new password."""
+        user = get_user_from_uid(uidb64)
+        if user is None or not is_valid_activation_token(user, token):
+            return Response({"detail": "Invalid or expired token."}, status=status.HTTP_400_BAD_REQUEST)
+        serializer = PasswordConfirmSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        user.set_password(serializer.validated_data['new_password'])
+        user.save()
+        return Response(
+            {"detail": "Your Password has been successfully reset."},
+            status=status.HTTP_200_OK
+        )
  
  
 class CookieTokenRefreshView(TokenRefreshView):
@@ -101,12 +147,15 @@ class CookieTokenRefreshView(TokenRefreshView):
         """Issues a new access token using the refresh token from cookies."""
         refresh_token = request.COOKIES.get("refresh_token")
         if refresh_token is None:
-            return Response({"detail": "Refresh token not found!"}, status=status.HTTP_401_UNAUTHORIZED)
+            return Response({"detail": "Refresh token not found!"}, status=status.HTTP_400_BAD_REQUEST)
         serializer = self.get_serializer(data={"refresh": refresh_token})
         try:
             serializer.is_valid(raise_exception=True)
         except TokenError:
             return Response({"detail": "Refresh token invalid!"}, status=status.HTTP_401_UNAUTHORIZED)
-        response = Response({"detail": "Token refreshed"}, status=status.HTTP_200_OK)
-        set_auth_cookies(response, serializer.validated_data.get("access"), serializer.validated_data.get("refresh"))
+        access_token = serializer.validated_data.get("access")
+        set_auth_cookies(response := Response(
+            {"detail": "Token refreshed", "access": access_token},
+            status=status.HTTP_200_OK
+        ), access_token, serializer.validated_data.get("refresh"))
         return response
