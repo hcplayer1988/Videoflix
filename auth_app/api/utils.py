@@ -2,10 +2,11 @@
  
 from django.contrib.auth import get_user_model
 from django.contrib.auth.tokens import default_token_generator
-from django.core.mail import send_mail
+from django.core.mail import EmailMultiAlternatives
 from django.conf import settings
 from django.utils.encoding import force_bytes, force_str
 from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
+from django.template.loader import render_to_string
  
 User = get_user_model()
  
@@ -17,27 +18,34 @@ def generate_uid_and_token(user):
     return uid, token
  
  
+def send_html_email(subject, template_name, context, recipient):
+    """Sends an HTML email using a template."""
+    html_content = render_to_string(template_name, context)
+    text_content = f"Please open this email in a browser that supports HTML."
+    email = EmailMultiAlternatives(subject, text_content, settings.DEFAULT_FROM_EMAIL, [recipient])
+    email.attach_alternative(html_content, "text/html")
+    email.send()
+ 
+ 
 def send_activation_email(user, uid, token):
-    """Sends an activation email to the given user."""
+    """Sends an HTML activation email to the given user."""
     activation_link = f"{settings.FRONTEND_URL}/pages/auth/activate.html?uid={uid}&token={token}"
-    send_mail(
+    send_html_email(
         subject="Activate your Videoflix account",
-        message=f"Please activate your account:\n\n{activation_link}",
-        from_email=settings.DEFAULT_FROM_EMAIL,
-        recipient_list=[user.email],
-        fail_silently=False,
+        template_name="emails/activation_email.html",
+        context={"activation_link": activation_link},
+        recipient=user.email,
     )
  
  
 def send_password_reset_email(user, uid, token):
-    """Sends a password reset email to the given user."""
+    """Sends an HTML password reset email to the given user."""
     reset_link = f"{settings.FRONTEND_URL}/pages/auth/confirm_password.html?uid={uid}&token={token}"
-    send_mail(
+    send_html_email(
         subject="Reset your Videoflix password",
-        message=f"Reset your password by clicking the link below:\n\n{reset_link}",
-        from_email=settings.DEFAULT_FROM_EMAIL,
-        recipient_list=[user.email],
-        fail_silently=False,
+        template_name="emails/password_reset_email.html",
+        context={"reset_link": reset_link},
+        recipient=user.email,
     )
  
  
@@ -79,9 +87,6 @@ def build_user_response(user):
     """Builds the user data dict for login response."""
     return {
         "detail": "Login successful",
-        "user": {
-            "id": user.id,
-            "username": user.username,
-        }
+        "user": {"id": user.id, "username": user.username},
     }
 
