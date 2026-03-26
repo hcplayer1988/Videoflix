@@ -1,5 +1,6 @@
 """Utility functions for authentication API endpoints."""
  
+import django_rq
 from django.contrib.auth import get_user_model
 from django.contrib.auth.tokens import default_token_generator
 from django.core.mail import EmailMultiAlternatives
@@ -18,19 +19,21 @@ def generate_uid_and_token(user):
     return uid, token
  
  
-def send_html_email(subject, template_name, context, recipient):
+def _send_html_email(subject, template_name, context, recipient):
     """Sends an HTML email using a template."""
     html_content = render_to_string(template_name, context)
-    text_content = f"Please open this email in a browser that supports HTML."
+    text_content = "Please open this email in a browser that supports HTML."
     email = EmailMultiAlternatives(subject, text_content, settings.DEFAULT_FROM_EMAIL, [recipient])
     email.attach_alternative(html_content, "text/html")
     email.send()
  
  
 def send_activation_email(user, uid, token):
-    """Sends an HTML activation email to the given user."""
+    """Enqueues an activation email in the high priority queue."""
     activation_link = f"{settings.FRONTEND_URL}/pages/auth/activate.html?uid={uid}&token={token}"
-    send_html_email(
+    queue = django_rq.get_queue('high')
+    queue.enqueue(
+        _send_html_email,
         subject="Activate your Videoflix account",
         template_name="emails/activation_email.html",
         context={"activation_link": activation_link},
@@ -39,9 +42,11 @@ def send_activation_email(user, uid, token):
  
  
 def send_password_reset_email(user, uid, token):
-    """Sends an HTML password reset email to the given user."""
+    """Enqueues a password reset email in the high priority queue."""
     reset_link = f"{settings.FRONTEND_URL}/pages/auth/confirm_password.html?uid={uid}&token={token}"
-    send_html_email(
+    queue = django_rq.get_queue('high')
+    queue.enqueue(
+        _send_html_email,
         subject="Reset your Videoflix password",
         template_name="emails/password_reset_email.html",
         context={"reset_link": reset_link},

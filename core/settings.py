@@ -72,7 +72,6 @@ TEMPLATES = [
             ],
         },
     },
-    
 ]
  
 WSGI_APPLICATION = 'core.wsgi.application'
@@ -109,6 +108,20 @@ RQ_QUEUES = {
         'PORT': config('REDIS_PORT', default=6379, cast=int),
         'DB': config('REDIS_DB', default=0, cast=int),
         'DEFAULT_TIMEOUT': 900,
+        'REDIS_CLIENT_KWARGS': {},
+    },
+    'high': {
+        'HOST': config('REDIS_HOST', default='redis'),
+        'PORT': config('REDIS_PORT', default=6379, cast=int),
+        'DB': config('REDIS_DB', default=0, cast=int),
+        'DEFAULT_TIMEOUT': 120,
+        'REDIS_CLIENT_KWARGS': {},
+    },
+    'low': {
+        'HOST': config('REDIS_HOST', default='redis'),
+        'PORT': config('REDIS_PORT', default=6379, cast=int),
+        'DB': config('REDIS_DB', default=0, cast=int),
+        'DEFAULT_TIMEOUT': 3600,
         'REDIS_CLIENT_KWARGS': {},
     },
 }

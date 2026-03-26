@@ -20,8 +20,8 @@ def create_video_from_upload(instance):
  
  
 def enqueue_hls_conversion(video_id, file_path):
-    """Enqueues the HLS conversion job in the RQ default queue."""
-    queue = django_rq.get_queue('default')
+    """Enqueues the HLS conversion job in the low priority queue."""
+    queue = django_rq.get_queue('low')
     queue.enqueue(convert_to_hls, video_id, file_path)
  
  
@@ -53,3 +53,4 @@ def auto_delete_file_on_change(sender, instance, **kwargs):
     if old_file and old_file != instance.file:
         if os.path.isfile(old_file.path):
             os.remove(old_file.path)
+            
