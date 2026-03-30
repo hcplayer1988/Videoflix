@@ -20,8 +20,8 @@ def create_video_from_upload(instance):
  
  
 def enqueue_hls_conversion(video_id, file_path):
-    """Enqueues the HLS conversion job in the low priority queue."""
-    queue = django_rq.get_queue('low')
+    """Enqueues the HLS conversion job in the default queue."""
+    queue = django_rq.get_queue('default')
     queue.enqueue(convert_to_hls, video_id, file_path)
  
  
