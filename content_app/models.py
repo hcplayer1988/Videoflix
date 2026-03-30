@@ -12,5 +12,8 @@ class Video(models.Model):
     thumbnail = models.ImageField(upload_to='thumbnails/', blank=True, null=True)
     category = models.CharField(max_length=100, blank=True)
  
+    class Meta:
+        ordering = ['-created_at']
+ 
     def __str__(self):
         return self.title
