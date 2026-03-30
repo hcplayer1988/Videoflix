@@ -63,8 +63,11 @@ class EmailTokenObtainPairSerializer(TokenObtainPairSerializer):
             user = User.objects.get(email=email)
             attrs['username'] = user.username
         except User.DoesNotExist:
-            raise serializers.ValidationError('No account found with this email.')
-        return super().validate(attrs)
+            raise serializers.ValidationError('Wrong user or password!')
+        try:
+            return super().validate(attrs)
+        except Exception:
+            raise serializers.ValidationError('Wrong user or password!')
  
  
 class PasswordConfirmSerializer(serializers.Serializer):
