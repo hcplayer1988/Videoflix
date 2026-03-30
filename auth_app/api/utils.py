@@ -1,6 +1,5 @@
 """Utility functions for authentication API endpoints."""
  
-import django_rq
 from django.contrib.auth import get_user_model
 from django.contrib.auth.tokens import default_token_generator
 from django.core.mail import EmailMultiAlternatives
@@ -19,7 +18,7 @@ def generate_uid_and_token(user):
     return uid, token
  
  
-def _send_html_email(subject, template_name, context, recipient):
+def send_html_email(subject, template_name, context, recipient):
     """Sends an HTML email using a template."""
     html_content = render_to_string(template_name, context)
     text_content = "Please open this email in a browser that supports HTML."
@@ -29,11 +28,9 @@ def _send_html_email(subject, template_name, context, recipient):
  
  
 def send_activation_email(user, uid, token):
-    """Enqueues an activation email in the high priority queue."""
+    """Sends an HTML activation email directly to the given user."""
     activation_link = f"{settings.FRONTEND_URL}/pages/auth/activate.html?uid={uid}&token={token}"
-    queue = django_rq.get_queue('high')
-    queue.enqueue(
-        _send_html_email,
+    send_html_email(
         subject="Activate your Videoflix account",
         template_name="emails/activation_email.html",
         context={"activation_link": activation_link},
@@ -42,11 +39,9 @@ def send_activation_email(user, uid, token):
  
  
 def send_password_reset_email(user, uid, token):
-    """Enqueues a password reset email in the high priority queue."""
+    """Sends an HTML password reset email directly to the given user."""
     reset_link = f"{settings.FRONTEND_URL}/pages/auth/confirm_password.html?uid={uid}&token={token}"
-    queue = django_rq.get_queue('high')
-    queue.enqueue(
-        _send_html_email,
+    send_html_email(
         subject="Reset your Videoflix password",
         template_name="emails/password_reset_email.html",
         context={"reset_link": reset_link},
