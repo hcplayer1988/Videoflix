@@ -34,10 +34,6 @@ A Django REST Framework backend for a Netflix-like video streaming platform. Fea
 - [Authentication Flow](#authentication-flow)
 - [Admin Panel](#admin-panel)
 - [Troubleshooting](#troubleshooting)
-  - [Issue: CORS errors in browser](#issue-cors-errors-in-browser)
-  - [Issue: Container does not start](#issue-container-does-not-start)
-  - [Issue: .env encoding error](#issue-env-encoding-error)
-  - [Issue: Cannot run manage.py commands on Windows](#issue-cannot-run-managepy-commands-on-windows)
 - [Production Deployment](#production-deployment)
 - [License](#license)
 
@@ -53,7 +49,6 @@ A Django REST Framework backend for a Netflix-like video streaming platform. Fea
 - **HLS Video Streaming**: Serve `.m3u8` playlists and `.ts` segments
 - **Automatic Video Conversion**: Background ffmpeg conversion to 480p, 720p and 1080p
 - **Thumbnail Generation**: Automatic thumbnail extraction via ffmpeg
-- **Priority Queues**: High priority for emails, low priority for video conversion
 - **HTML Email Templates**: Branded email templates with dark mode support
 
 ## Tech Stack
@@ -221,19 +216,13 @@ On startup the container automatically:
 
 ### RQ Queue Configuration
 
-The project uses three priority queues:
+The project uses a single `default` queue with a 3600s timeout to handle all background tasks including HLS video conversion:
 
 | Queue | Use Case | Timeout |
 |-------|----------|---------|
-| `high` | Email sending | 120s |
-| `default` | General tasks | 900s |
-| `low` | HLS video conversion | 3600s |
+| `default` | HLS conversion, thumbnail generation | 3600s |
 
-The RQ worker runs automatically in the Docker container and listens on the `default` queue. To enable all queues, update `backend.entrypoint.sh`:
-
-```bash
-python manage.py rqworker high default low &
-```
+The RQ worker starts automatically in the Docker container and listens on the `default` queue.
 
 ### Email Configuration
 
@@ -335,8 +324,6 @@ Content-Type: application/json
 POST http://127.0.0.1:8000/api/logout/
 ```
 
-Blacklists the refresh token and deletes both cookies.
-
 **Response (200):**
 ```json
 {
@@ -382,6 +369,8 @@ GET http://127.0.0.1:8000/api/video/
 ]
 ```
 
+Videos are returned sorted by creation date descending (newest first).
+
 ### HLS Playlist
 
 ```bash
@@ -402,13 +391,14 @@ Returns the binary TS segment (`Content-Type: video/MP2T`).
 
 ### Upload Flow
 
-1. Upload video via Django Admin (`/admin/`) or API (`POST /api/upload/`)
+1. Upload video via Django Admin (`/admin/`) under **Upload App → File Uploads → Add**
 2. `post_save` signal fires on `FileUpload` save
 3. A `Video` object is automatically created in `content_app`
-4. HLS conversion job is enqueued in the `low` priority RQ queue
+4. HLS conversion job is enqueued in the `default` RQ queue
 5. ffmpeg converts the video to 480p, 720p and 1080p HLS format
-6. Thumbnail is extracted from the first second of the video
-7. Thumbnail is saved to the `Video` object
+6. Thumbnail is extracted from the video and saved to the `Video` object
+
+> ℹ️ **Note:** When uploading via the Admin Panel, the browser may show a 500 error briefly after saving. This is normal — simply refresh the page and the video will appear correctly. The HLS conversion runs in the background and completes within a few seconds to minutes depending on video length.
 
 ### HLS File Structure
 
@@ -435,8 +425,6 @@ media/
 ```
 
 ## Authentication Flow
-
-The project uses JWT tokens stored in httpOnly cookies:
 
 ```
 Register → Activation Email → Activate Account → Login
@@ -515,10 +503,15 @@ Rename-Item .env_temp .env
 docker exec -it videoflix_backend python manage.py <command>
 ```
 
-For example, to create a new app:
+### Issue: Video shows 404 after upload
+
+The HLS conversion runs in the background and may take a few seconds to minutes. Wait for the conversion to complete before trying to play the video. You can monitor the progress in the Docker logs:
+
 ```powershell
-docker exec -it videoflix_backend python manage.py startapp my_app
+docker-compose logs web --tail=50
 ```
+
+Look for: `Successfully completed upload_app.tasks.convert_to_hls`
 
 ## Production Deployment
 
@@ -549,15 +542,6 @@ SECURE_SSL_REDIRECT = True
 SESSION_COOKIE_SECURE = True
 CSRF_COOKIE_SECURE = True
 ```
-
-**6. Update JWT cookie settings** for production:
-```python
-SIMPLE_JWT = {
-    ...
-}
-```
-
-**7. Replace logo URL** in email templates with the production static URL.
 
 ## License
 
