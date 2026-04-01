@@ -122,11 +122,18 @@ Videoflix/
 
 ### Prerequisites
 
-- Docker Desktop
-- Git
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/) installed and running
+- [Git](https://git-scm.com/) installed
 
 ### 1. Clone the Repository
 
+**Windows (PowerShell):**
+```powershell
+git clone https://github.com/hcplayer1988/Videoflix.git
+cd Videoflix
+```
+
+**Linux / Mac:**
 ```bash
 git clone https://github.com/hcplayer1988/Videoflix.git
 cd Videoflix
@@ -134,34 +141,51 @@ cd Videoflix
 
 ### 2. Environment Configuration
 
-Copy the template and fill in your values:
+Create your `.env` file from the template:
 
+**Windows (PowerShell):**
+```powershell
+copy .env.template .env
+```
+
+**Linux / Mac:**
 ```bash
 cp .env.template .env
 ```
 
-Edit `.env` with your settings:
+Now open the `.env` file and fill in your values. Here is a complete example:
 
 ```env
+# Superuser — created automatically on first start
+DJANGO_SUPERUSER_USERNAME=admin
+DJANGO_SUPERUSER_PASSWORD=adminpassword
+DJANGO_SUPERUSER_EMAIL=admin@example.com
+
+# Django
 SECRET_KEY=your-secret-key-here
 DEBUG=True
 ALLOWED_HOSTS=localhost,127.0.0.1
 CSRF_TRUSTED_ORIGINS=http://localhost:5500,http://127.0.0.1:5500
 CORS_ALLOWED_ORIGINS=http://localhost:5500,http://127.0.0.1:5500
+
+# URLs
 FRONTEND_URL=http://127.0.0.1:5500
 BACKEND_URL=http://127.0.0.1:8000
 
-DB_NAME=your_database_name
-DB_USER=your_database_user
+# Database
+DB_NAME=videoflix_db
+DB_USER=videoflix_user
 DB_PASSWORD=your_database_password
 DB_HOST=db
 DB_PORT=5432
 
+# Redis
 REDIS_HOST=redis
 REDIS_LOCATION=redis://redis:6379/1
 REDIS_PORT=6379
 REDIS_DB=0
 
+# Email
 EMAIL_HOST=your-smtp-host
 EMAIL_PORT=587
 EMAIL_HOST_USER=your-email@domain.com
@@ -171,9 +195,12 @@ EMAIL_USE_SSL=False
 DEFAULT_FROM_EMAIL=your-email@domain.com
 ```
 
-> ⚠️ **Important:** If your `SECRET_KEY` contains a `#` character, wrap it in double quotes: `SECRET_KEY="your#key"`
->
-> ⚠️ **Important:** The `.env` file must be **UTF-8 encoded**. If you created it with Notepad on Windows, convert it:
+> ⚠️ **Important:** If your `SECRET_KEY` contains a `#` character, wrap the entire value in double quotes:
+> ```env
+> SECRET_KEY="your#secret#key"
+> ```
+
+> ⚠️ **Windows only:** The `.env` file must be **UTF-8 encoded**. If you edited it with Notepad, convert it with PowerShell to be safe:
 > ```powershell
 > Get-Content .env | Set-Content -Encoding UTF8 .env_temp
 > Remove-Item .env
@@ -188,31 +215,53 @@ docker-compose up --build
 
 The API will be available at: `http://127.0.0.1:8000/`
 
-On startup the container automatically:
-- Waits for PostgreSQL to be ready
-- Runs `collectstatic`
-- Runs `makemigrations` and `migrate`
-- Creates the superuser from `.env` credentials
-- Starts the RQ worker
-- Starts Gunicorn
+On first startup the container automatically:
+1. Waits for PostgreSQL to be ready
+2. Runs `collectstatic`
+3. Runs `makemigrations` and `migrate`
+4. Creates the superuser from the `.env` credentials
+5. Starts the RQ worker for background jobs
+6. Starts Gunicorn
+
+> ℹ️ The first build takes a few minutes. On subsequent starts use `docker-compose up` without `--build`.
+
+To stop the containers:
+```bash
+docker-compose down
+```
+
+---
 
 ## Configuration
 
 ### Environment Variables
 
-| Variable | Description | Default |
+| Variable | Description | Example |
 |----------|-------------|---------|
-| `SECRET_KEY` | Django secret key | — |
-| `DEBUG` | Debug mode | `False` |
-| `ALLOWED_HOSTS` | Comma-separated allowed hosts | `localhost` |
-| `FRONTEND_URL` | Frontend base URL for email links | `http://localhost:5500` |
+| `DJANGO_SUPERUSER_USERNAME` | Admin username | `admin` |
+| `DJANGO_SUPERUSER_PASSWORD` | Admin password | `adminpassword` |
+| `DJANGO_SUPERUSER_EMAIL` | Admin email | `admin@example.com` |
+| `SECRET_KEY` | Django secret key | `your-secret-key` |
+| `DEBUG` | Debug mode | `True` / `False` |
+| `ALLOWED_HOSTS` | Comma-separated allowed hosts | `localhost,127.0.0.1` |
+| `FRONTEND_URL` | Frontend base URL for email links | `http://127.0.0.1:5500` |
 | `BACKEND_URL` | Backend base URL | `http://127.0.0.1:8000` |
 | `DB_NAME` | PostgreSQL database name | `videoflix_db` |
 | `DB_USER` | PostgreSQL user | `videoflix_user` |
-| `DB_PASSWORD` | PostgreSQL password | — |
-| `DB_HOST` | PostgreSQL host | `db` |
-| `REDIS_HOST` | Redis host | `redis` |
-| `MEDIA_ROOT` | Media files directory | `<BASE_DIR>/media` |
+| `DB_PASSWORD` | PostgreSQL password | `your_password` |
+| `DB_HOST` | PostgreSQL host (use `db` in Docker) | `db` |
+| `DB_PORT` | PostgreSQL port | `5432` |
+| `REDIS_HOST` | Redis host (use `redis` in Docker) | `redis` |
+| `REDIS_LOCATION` | Redis location for cache | `redis://redis:6379/1` |
+| `REDIS_PORT` | Redis port | `6379` |
+| `REDIS_DB` | Redis DB index | `0` |
+| `EMAIL_HOST` | SMTP host | `smtp.gmail.com` |
+| `EMAIL_PORT` | SMTP port | `587` |
+| `EMAIL_HOST_USER` | SMTP username | `your@email.com` |
+| `EMAIL_HOST_PASSWORD` | SMTP password | `your_password` |
+| `EMAIL_USE_TLS` | Use TLS | `True` |
+| `EMAIL_USE_SSL` | Use SSL | `False` |
+| `DEFAULT_FROM_EMAIL` | Sender email address | `noreply@videoflix.com` |
 
 ### RQ Queue Configuration
 
@@ -228,7 +277,9 @@ The RQ worker starts automatically in the Docker container and listens on the `d
 
 The project uses HTML email templates with dark mode support. Emails are sent directly (not via queue) for reliability.
 
-Supported SMTP providers: All-inkl, Gmail, Outlook, any standard SMTP server.
+Tested SMTP providers: All-inkl, Gmail, Outlook, any standard SMTP server.
+
+---
 
 ## API Endpoints
 
@@ -241,7 +292,7 @@ Supported SMTP providers: All-inkl, Gmail, Outlook, any standard SMTP server.
 | POST | `/api/login/` | Login and set JWT cookies | No |
 | POST | `/api/logout/` | Logout and invalidate tokens | Refresh-Token-Cookie |
 | POST | `/api/password_reset/` | Send password reset email | No |
-| POST | `/api/password_confirm/<uidb64>/<token>/` | Confirm new password | No |
+| POST | `/api/password_confirm/<uidb64>/<token>/` | Set new password | No |
 | POST | `/api/token/refresh/` | Refresh access token | Refresh-Token-Cookie |
 
 ### Video
@@ -253,6 +304,8 @@ Supported SMTP providers: All-inkl, Gmail, Outlook, any standard SMTP server.
 | GET | `/api/video/<id>/<resolution>/<segment>/` | HLS video segment | JWT |
 
 **Resolutions:** `480p`, `720p`, `1080p`
+
+---
 
 ## API Usage Examples
 
@@ -280,9 +333,11 @@ Content-Type: application/json
 }
 ```
 
-After registration an activation email is sent. The account remains inactive until activation.
+After registration an activation email is sent to the user. The account remains inactive until the email link is clicked.
 
 ### Account Activation
+
+The activation link in the email points to the frontend which then calls:
 
 ```
 GET http://127.0.0.1:8000/api/activate/<uidb64>/<token>/
@@ -307,7 +362,7 @@ Content-Type: application/json
 }
 ```
 
-**Response (200):** Sets `access_token` and `refresh_token` as httpOnly cookies.
+**Response (200):** Sets `access_token` (15 min) and `refresh_token` (7 days) as httpOnly cookies.
 ```json
 {
   "detail": "Login successful",
@@ -318,11 +373,15 @@ Content-Type: application/json
 }
 ```
 
+> ℹ️ If the account is not activated or the credentials are wrong, the response is always `"Wrong user or password!"` for security reasons.
+
 ### Logout
 
 ```bash
 POST http://127.0.0.1:8000/api/logout/
 ```
+
+Blacklists the refresh token and deletes both cookies.
 
 **Response (200):**
 ```json
@@ -349,13 +408,15 @@ Content-Type: application/json
 }
 ```
 
+The reset link in the email points to the frontend which then calls `POST /api/password_confirm/<uidb64>/<token>/` with the new password.
+
 ### Video List
 
 ```bash
 GET http://127.0.0.1:8000/api/video/
 ```
 
-**Response (200):**
+**Response (200):** Videos sorted by creation date descending (newest first).
 ```json
 [
   {
@@ -369,15 +430,13 @@ GET http://127.0.0.1:8000/api/video/
 ]
 ```
 
-Videos are returned sorted by creation date descending (newest first).
-
 ### HLS Playlist
 
 ```bash
 GET http://127.0.0.1:8000/api/video/1/720p/index.m3u8
 ```
 
-Returns the HLS master playlist file (`Content-Type: application/vnd.apple.mpegurl`).
+Returns the HLS playlist file (`Content-Type: application/vnd.apple.mpegurl`).
 
 ### HLS Segment
 
@@ -387,18 +446,27 @@ GET http://127.0.0.1:8000/api/video/1/720p/000.ts/
 
 Returns the binary TS segment (`Content-Type: video/MP2T`).
 
+---
+
 ## Video Upload & Processing
 
 ### Upload Flow
 
-1. Upload video via Django Admin (`/admin/`) under **Upload App → File Uploads → Add**
-2. `post_save` signal fires on `FileUpload` save
-3. A `Video` object is automatically created in `content_app`
-4. HLS conversion job is enqueued in the `default` RQ queue
-5. ffmpeg converts the video to 480p, 720p and 1080p HLS format
-6. Thumbnail is extracted from the video and saved to the `Video` object
+1. Open the Django Admin at `http://127.0.0.1:8000/admin/`
+2. Go to **Upload App → File Uploads → Add File Upload**
+3. Fill in title, description, category and select a video file
+4. Click **Save**
+5. A `Video` object is automatically created
+6. HLS conversion (480p, 720p, 1080p) runs in the background via RQ
+7. Thumbnail is extracted and saved automatically
 
-> ℹ️ **Note:** When uploading via the Admin Panel, the browser may show a 500 error briefly after saving. This is normal — simply refresh the page and the video will appear correctly. The HLS conversion runs in the background and completes within a few seconds to minutes depending on video length.
+> ℹ️ **Note:** The browser may briefly show a 500 error after saving in the Admin Panel. This is normal — simply refresh the page. The video will appear correctly and the HLS conversion continues in the background.
+
+> ℹ️ **Note:** The video will not be playable immediately after upload. Wait for the HLS conversion to finish. Monitor progress with:
+> ```powershell
+> docker-compose logs web --tail=50
+> ```
+> Look for: `Successfully completed upload_app.tasks.convert_to_hls`
 
 ### HLS File Structure
 
@@ -424,34 +492,40 @@ media/
     └── 1.jpg
 ```
 
+---
+
 ## Authentication Flow
 
 ```
 Register → Activation Email → Activate Account → Login
-              ↓
-    access_token cookie (15 min)
-    refresh_token cookie (7 days)
-              ↓
-    API requests use access_token cookie
-              ↓
-    POST /api/token/refresh/ → new access_token
-              ↓
-    POST /api/logout/ → blacklist refresh_token, delete cookies
+                                                    ↓
+                                        access_token cookie (15 min)
+                                        refresh_token cookie (7 days)
+                                                    ↓
+                                        API requests use access_token cookie
+                                                    ↓
+                                        POST /api/token/refresh/ → new access_token
+                                                    ↓
+                                        POST /api/logout/ → blacklist refresh_token, delete cookies
 ```
+
+---
 
 ## Admin Panel
 
 Access the Django admin at: `http://127.0.0.1:8000/admin/`
 
 Login with the superuser credentials from your `.env`:
-- **Username:** `DJANGO_SUPERUSER_USERNAME`
-- **Password:** `DJANGO_SUPERUSER_PASSWORD`
+- **Username:** value of `DJANGO_SUPERUSER_USERNAME`
+- **Password:** value of `DJANGO_SUPERUSER_PASSWORD`
 
 **Features:**
-- User management
+- User management (activate/deactivate accounts)
 - Video management (add, edit, delete)
 - File upload management
 - RQ job monitoring at `/django-rq/`
+
+---
 
 ## Troubleshooting
 
@@ -463,21 +537,22 @@ Access to fetch has been blocked by CORS policy
 ```
 
 **Solution:**
-1. Check `CORS_ALLOWED_ORIGINS` in `.env` matches your frontend URL exactly
-2. Ensure `CORS_ALLOW_CREDENTIALS = True` is set in `settings.py`
-3. Disable any browser CORS extensions
-4. Test in Incognito mode
+1. Check that `CORS_ALLOWED_ORIGINS` in `.env` matches your frontend URL exactly
+2. Disable any browser CORS extensions
+3. Test in Incognito mode
+4. Restart Docker after any `.env` changes: `docker-compose down && docker-compose up`
 
 ### Issue: Container does not start
 
-```bash
+Check the logs:
+```powershell
 docker-compose logs web
 ```
 
 Common causes:
-- `.env` missing or incorrectly encoded (must be UTF-8)
-- Database credentials wrong
-- Port 8000 already in use
+- `.env` file missing or not UTF-8 encoded
+- Database credentials incorrect
+- Port 8000 already in use on your machine
 
 ### Issue: .env encoding error
 
@@ -495,9 +570,9 @@ Rename-Item .env_temp .env
 
 ### Issue: Cannot run manage.py commands on Windows
 
-`django-rq` uses Linux's `fork` process context and does not work on Windows.
+`django-rq` uses Linux's `fork` process context and does not run on Windows natively.
 
-**Solution:** Run Django management commands inside the Docker container:
+**Solution:** Always run Django management commands inside the Docker container:
 
 ```powershell
 docker exec -it videoflix_backend python manage.py <command>
@@ -505,7 +580,7 @@ docker exec -it videoflix_backend python manage.py <command>
 
 ### Issue: Video shows 404 after upload
 
-The HLS conversion runs in the background and may take a few seconds to minutes. Wait for the conversion to complete before trying to play the video. You can monitor the progress in the Docker logs:
+The HLS conversion runs in the background and takes a few seconds to minutes depending on video length. Monitor progress:
 
 ```powershell
 docker-compose logs web --tail=50
@@ -513,13 +588,25 @@ docker-compose logs web --tail=50
 
 Look for: `Successfully completed upload_app.tasks.convert_to_hls`
 
+### Issue: Emails not arriving
+
+1. Check your SMTP credentials in `.env`
+2. Make sure `EMAIL_USE_TLS=True` and `EMAIL_USE_SSL=False` for port 587
+3. Some providers (e.g. Gmail) require an app-specific password instead of your regular password
+4. Check your spam folder
+
+---
+
 ## Production Deployment
 
-Before deploying to production:
+Before deploying to production, make the following changes in your `.env`:
 
-**1. Set `DEBUG = False`** in `.env`
+**1. Disable debug mode:**
+```env
+DEBUG=False
+```
 
-**2. Update `ALLOWED_HOSTS`:**
+**2. Update allowed hosts:**
 ```env
 ALLOWED_HOSTS=yourdomain.com,www.yourdomain.com
 ```
@@ -536,12 +623,19 @@ FRONTEND_URL=https://yourdomain.com
 BACKEND_URL=https://api.yourdomain.com
 ```
 
-**5. Enable HTTPS settings** in `settings.py`:
+**5. Use a strong secret key:**
+```env
+SECRET_KEY="your-very-long-random-secret-key-here"
+```
+
+**6. Enable HTTPS settings** in `core/settings.py`:
 ```python
 SECURE_SSL_REDIRECT = True
 SESSION_COOKIE_SECURE = True
 CSRF_COOKIE_SECURE = True
 ```
+
+---
 
 ## License
 
