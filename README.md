@@ -12,6 +12,7 @@ A Django REST Framework backend for a Netflix-like video streaming platform. Fea
   - [1. Clone the Repository](#1-clone-the-repository)
   - [2. Environment Configuration](#2-environment-configuration)
   - [3. Start with Docker](#3-start-with-docker)
+  - [4. Add Videos](#4-add-videos)
 - [Configuration](#configuration)
   - [Environment Variables](#environment-variables)
   - [RQ Queue Configuration](#rq-queue-configuration)
@@ -230,6 +231,32 @@ To stop the containers:
 docker-compose down
 ```
 
+### 4. Add Videos
+
+The database is empty after a fresh setup — videos must be added manually via the Django Admin.
+
+1. Open `http://127.0.0.1:8000/admin/` and log in with your superuser credentials
+2. Go to **Upload App → File Uploads → Add File Upload**
+3. Fill in the following fields:
+   - **Title** — video title shown in the frontend
+   - **Description** — short description
+   - **Category** — genre (e.g. `Drama`, `Action`, `Comedy`)
+   - **File** — select a `.mp4` video file from your computer
+4. Click **Save**
+
+After saving, the backend automatically:
+- Creates a `Video` object in the database
+- Starts HLS conversion to 480p, 720p and 1080p in the background
+- Generates a thumbnail from the video
+
+> ℹ️ **Note:** The browser may briefly show a 500 error after saving in the Admin Panel. This is normal — simply refresh the page. The video will appear correctly and the HLS conversion continues in the background.
+
+> ℹ️ **Note:** The video will not be playable immediately. Wait for the HLS conversion to finish. Monitor progress with:
+> ```powershell
+> docker-compose logs web --tail=50
+> ```
+> Look for: `Successfully completed upload_app.tasks.convert_to_hls`
+
 ---
 
 ## Configuration
@@ -333,11 +360,9 @@ Content-Type: application/json
 }
 ```
 
-After registration an activation email is sent to the user. The account remains inactive until the email link is clicked.
+After registration an activation email is sent. The account remains inactive until the email link is clicked.
 
 ### Account Activation
-
-The activation link in the email points to the frontend which then calls:
 
 ```
 GET http://127.0.0.1:8000/api/activate/<uidb64>/<token>/
@@ -381,8 +406,6 @@ Content-Type: application/json
 POST http://127.0.0.1:8000/api/logout/
 ```
 
-Blacklists the refresh token and deletes both cookies.
-
 **Response (200):**
 ```json
 {
@@ -407,8 +430,6 @@ Content-Type: application/json
   "detail": "An email has been sent to reset your password."
 }
 ```
-
-The reset link in the email points to the frontend which then calls `POST /api/password_confirm/<uidb64>/<token>/` with the new password.
 
 ### Video List
 
@@ -459,14 +480,6 @@ Returns the binary TS segment (`Content-Type: video/MP2T`).
 5. A `Video` object is automatically created
 6. HLS conversion (480p, 720p, 1080p) runs in the background via RQ
 7. Thumbnail is extracted and saved automatically
-
-> ℹ️ **Note:** The browser may briefly show a 500 error after saving in the Admin Panel. This is normal — simply refresh the page. The video will appear correctly and the HLS conversion continues in the background.
-
-> ℹ️ **Note:** The video will not be playable immediately after upload. Wait for the HLS conversion to finish. Monitor progress with:
-> ```powershell
-> docker-compose logs web --tail=50
-> ```
-> Look for: `Successfully completed upload_app.tasks.convert_to_hls`
 
 ### HLS File Structure
 
@@ -529,6 +542,33 @@ Login with the superuser credentials from your `.env`:
 
 ## Troubleshooting
 
+### Issue: `exec ./backend.entrypoint.sh: no such file or directory`
+
+**Cause:** The `backend.entrypoint.sh` file has Windows line endings (CRLF) instead of Unix line endings (LF). This happens when the file is edited or cloned on Windows.
+
+**Solution:**
+1. Open `backend.entrypoint.sh` in VS Code
+2. Click on `CRLF` in the bottom right status bar
+3. Select `LF`
+4. Save the file
+5. Restart Docker:
+```powershell
+docker-compose down
+docker-compose up --build
+```
+
+### Issue: `password authentication failed for user "..."`
+
+**Cause:** Docker still has an old PostgreSQL volume from a previous setup with different credentials. The database was already initialized with different values and ignores the new `.env`.
+
+**Solution:** Delete all volumes and restart:
+```powershell
+docker-compose down -v
+docker-compose up --build
+```
+
+> ⚠️ This deletes all data in the database. You will need to add videos again afterwards.
+
 ### Issue: CORS errors in browser
 
 **Symptoms:**
@@ -540,7 +580,11 @@ Access to fetch has been blocked by CORS policy
 1. Check that `CORS_ALLOWED_ORIGINS` in `.env` matches your frontend URL exactly
 2. Disable any browser CORS extensions
 3. Test in Incognito mode
-4. Restart Docker after any `.env` changes: `docker-compose down && docker-compose up`
+4. Restart Docker after any `.env` changes:
+```powershell
+docker-compose down
+docker-compose up
+```
 
 ### Issue: Container does not start
 
