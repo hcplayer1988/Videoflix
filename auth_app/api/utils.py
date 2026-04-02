@@ -33,7 +33,7 @@ def send_activation_email(user, uid, token):
     send_html_email(
         subject="Activate your Videoflix account",
         template_name="emails/activation_email.html",
-        context={"activation_link": activation_link},
+        context={"activation_link": activation_link, "email": user.email},
         recipient=user.email,
     )
  
@@ -44,7 +44,7 @@ def send_password_reset_email(user, uid, token):
     send_html_email(
         subject="Reset your Videoflix password",
         template_name="emails/password_reset_email.html",
-        context={"reset_link": reset_link},
+        context={"reset_link": reset_link, "email": user.email},
         recipient=user.email,
     )
  
