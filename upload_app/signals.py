@@ -5,8 +5,7 @@ import django_rq
 from django.db.models.signals import post_save, post_delete, pre_save
 from django.dispatch import receiver
  
-from upload_app.models import FileUpload
-from content_app.models import Video
+from upload_app.models import FileUpload, Video
 from .tasks import convert_to_hls
  
  
@@ -31,14 +30,18 @@ def handle_file_upload(sender, instance, created, **kwargs):
     if not created:
         return
     video = create_video_from_upload(instance)
+    instance.video = video
+    FileUpload.objects.filter(pk=instance.pk).update(video=video)
     enqueue_hls_conversion(video.id, instance.file.path)
  
  
 @receiver(post_delete, sender=FileUpload)
 def auto_delete_file_on_delete(sender, instance, **kwargs):
-    """Deletes file from filesystem when the FileUpload object is deleted."""
+    """Deletes the raw upload file and the linked Video when a FileUpload is deleted."""
     if instance.file and os.path.isfile(instance.file.path):
         os.remove(instance.file.path)
+    if instance.video:
+        instance.video.delete()
  
  
 @receiver(pre_save, sender=FileUpload)

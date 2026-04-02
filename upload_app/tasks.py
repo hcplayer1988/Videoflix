@@ -36,7 +36,7 @@ def build_ffmpeg_command(input_path, output_dir, resolution):
  
 def generate_thumbnail(video_id, input_path):
     """Generates a thumbnail from the video and saves it to the Video object."""
-    from content_app.models import Video
+    from upload_app.models import Video
     thumbnail_dir = os.path.join(settings.MEDIA_ROOT, 'thumbnails')
     os.makedirs(thumbnail_dir, exist_ok=True)
     thumbnail_path = os.path.join(thumbnail_dir, f'{video_id}.jpg')

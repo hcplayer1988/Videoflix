@@ -31,6 +31,7 @@ A Django REST Framework backend for a Netflix-like video streaming platform. Fea
   - [HLS Segment](#hls-segment)
 - [Video Upload & Processing](#video-upload--processing)
   - [Upload Flow](#upload-flow)
+  - [Delete Flow](#delete-flow)
   - [HLS File Structure](#hls-file-structure)
 - [Authentication Flow](#authentication-flow)
 - [Admin Panel](#admin-panel)
@@ -50,6 +51,7 @@ A Django REST Framework backend for a Netflix-like video streaming platform. Fea
 - **HLS Video Streaming**: Serve `.m3u8` playlists and `.ts` segments
 - **Automatic Video Conversion**: Background ffmpeg conversion to 480p, 720p and 1080p
 - **Thumbnail Generation**: Automatic thumbnail extraction via ffmpeg
+- **Automatic Cleanup**: Deleting a video removes all HLS files and thumbnails from the server
 - **HTML Email Templates**: Branded email templates with dark mode support
 
 ## Tech Stack
@@ -82,22 +84,15 @@ Videoflix/
 │   │   ├── views.py
 │   │   └── urls.py
 │   └── admin.py
-├── upload_app/                    # Video file upload
+├── upload_app/                    # Video upload, processing and content delivery
 │   ├── api/
-│   │   ├── serializers.py
-│   │   ├── views.py
+│   │   ├── serializers.py         # FileUploadSerializer, VideoSerializer
+│   │   ├── views.py               # Upload, VideoList, VideoPlaylist, VideoSegment
 │   │   └── urls.py
-│   ├── models.py                  # FileUpload model
-│   ├── signals.py                 # Auto-create Video, trigger conversion
+│   ├── models.py                  # FileUpload model, Video model
+│   ├── signals.py                 # Auto-create Video, trigger conversion, cleanup on delete
 │   ├── tasks.py                   # HLS conversion & thumbnail RQ tasks
 │   └── apps.py                    # Signal registration
-├── content_app/                   # Video content delivery
-│   ├── api/
-│   │   ├── serializers.py
-│   │   ├── views.py
-│   │   └── urls.py
-│   ├── models.py                  # Video model
-│   └── admin.py
 ├── templates/
 │   └── emails/
 │       ├── activation_email.html
@@ -477,9 +472,17 @@ Returns the binary TS segment (`Content-Type: video/MP2T`).
 2. Go to **Upload App → File Uploads → Add File Upload**
 3. Fill in title, description, category and select a video file
 4. Click **Save**
-5. A `Video` object is automatically created
+5. A `Video` object is automatically created and linked to the `FileUpload`
 6. HLS conversion (480p, 720p, 1080p) runs in the background via RQ
 7. Thumbnail is extracted and saved automatically
+
+### Delete Flow
+
+When a `FileUpload` is deleted via the Admin Panel:
+1. The raw upload file is deleted from `media/uploads/`
+2. The linked `Video` object is deleted from the database
+3. All HLS files are deleted from `media/videos/<id>/`
+4. The thumbnail is deleted from `media/thumbnails/`
 
 ### HLS File Structure
 
@@ -534,8 +537,8 @@ Login with the superuser credentials from your `.env`:
 
 **Features:**
 - User management (activate/deactivate accounts)
-- Video management (add, edit, delete)
-- File upload management
+- Video management under **Upload App → Videos**
+- File upload management under **Upload App → File Uploads**
 - RQ job monitoring at `/django-rq/`
 
 ---
@@ -544,7 +547,7 @@ Login with the superuser credentials from your `.env`:
 
 ### Issue: `exec ./backend.entrypoint.sh: no such file or directory`
 
-**Cause:** The `backend.entrypoint.sh` file has Windows line endings (CRLF) instead of Unix line endings (LF). This happens when the file is edited or cloned on Windows.
+**Cause:** The `backend.entrypoint.sh` file has Windows line endings (CRLF) instead of Unix line endings (LF).
 
 **Solution:**
 1. Open `backend.entrypoint.sh` in VS Code
@@ -559,7 +562,7 @@ docker-compose up --build
 
 ### Issue: `password authentication failed for user "..."`
 
-**Cause:** Docker still has an old PostgreSQL volume from a previous setup with different credentials. The database was already initialized with different values and ignores the new `.env`.
+**Cause:** Docker still has an old PostgreSQL volume from a previous setup with different credentials.
 
 **Solution:** Delete all volumes and restart:
 ```powershell
@@ -624,7 +627,7 @@ docker exec -it videoflix_backend python manage.py <command>
 
 ### Issue: Video shows 404 after upload
 
-The HLS conversion runs in the background and takes a few seconds to minutes depending on video length. Monitor progress:
+The HLS conversion runs in the background and takes a few seconds to minutes. Monitor progress:
 
 ```powershell
 docker-compose logs web --tail=50
