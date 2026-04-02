@@ -35,11 +35,12 @@ def build_ffmpeg_command(input_path, output_dir, resolution):
  
  
 def generate_thumbnail(video_id, input_path):
-    """Generates a thumbnail from the video and saves it to the Video object."""
+    """Generates a thumbnail from the video and saves it directly to the correct path."""
     from upload_app.models import Video
     thumbnail_dir = os.path.join(settings.MEDIA_ROOT, 'thumbnails')
     os.makedirs(thumbnail_dir, exist_ok=True)
-    thumbnail_path = os.path.join(thumbnail_dir, f'{video_id}.jpg')
+    thumbnail_filename = f'{video_id}.jpg'
+    thumbnail_path = os.path.join(thumbnail_dir, thumbnail_filename)
     command = [
         'ffmpeg', '-i', input_path,
         '-ss', '00:00:05',
@@ -49,8 +50,8 @@ def generate_thumbnail(video_id, input_path):
     ]
     subprocess.run(command, check=True)
     video = Video.objects.get(pk=video_id)
-    with open(thumbnail_path, 'rb') as f:
-        video.thumbnail.save(f'{video_id}.jpg', File(f), save=True)
+    video.thumbnail = f'thumbnails/{thumbnail_filename}'
+    video.save()
  
  
 def convert_to_hls(video_id, input_path):
@@ -61,3 +62,5 @@ def convert_to_hls(video_id, input_path):
         os.makedirs(output_dir, exist_ok=True)
         command = build_ffmpeg_command(input_path, output_dir, resolution)
         subprocess.run(command, check=True)
+        
+        

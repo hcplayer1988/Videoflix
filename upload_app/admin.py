@@ -12,13 +12,6 @@ class FileUploadAdmin(admin.ModelAdmin):
     list_filter = ['category']
     search_fields = ['title', 'description']
     ordering = ['-uploaded_at']
+    exclude = ['video']
  
  
-@admin.register(Video)
-class VideoAdmin(admin.ModelAdmin):
-    """Admin configuration for the Video model."""
- 
-    list_display = ['id', 'title', 'category', 'created_at']
-    list_filter = ['category']
-    search_fields = ['title', 'description']
-    ordering = ['-created_at']

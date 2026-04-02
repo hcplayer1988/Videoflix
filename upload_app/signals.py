@@ -2,7 +2,7 @@
  
 import os
 import django_rq
-from django.db.models.signals import post_save, post_delete, pre_save
+from django.db.models.signals import post_save, post_delete, pre_save, pre_delete
 from django.dispatch import receiver
  
 from upload_app.models import FileUpload, Video
@@ -35,13 +35,20 @@ def handle_file_upload(sender, instance, created, **kwargs):
     enqueue_hls_conversion(video.id, instance.file.path)
  
  
+@receiver(pre_delete, sender=FileUpload)
+def capture_video_before_delete(sender, instance, **kwargs):
+    """Stores the linked Video on the instance before SET_NULL removes the reference."""
+    instance._video_to_delete = instance.video
+ 
+ 
 @receiver(post_delete, sender=FileUpload)
 def auto_delete_file_on_delete(sender, instance, **kwargs):
     """Deletes the raw upload file and the linked Video when a FileUpload is deleted."""
     if instance.file and os.path.isfile(instance.file.path):
         os.remove(instance.file.path)
-    if instance.video:
-        instance.video.delete()
+    video = getattr(instance, '_video_to_delete', None)
+    if video:
+        video.delete()
  
  
 @receiver(pre_save, sender=FileUpload)
