@@ -9,13 +9,14 @@ from django.conf import settings
  
  
 class Video(models.Model):
-    """Represents a video with metadata."""
+    """Represents an uploaded video with metadata and HLS conversion state."""
  
-    created_at = models.DateTimeField(auto_now_add=True)
-    title = models.CharField(max_length=255)
-    description = models.TextField(blank=True)
+    file = models.FileField(upload_to='uploads/')
+    title = models.CharField(max_length=255, default='')
+    description = models.TextField(blank=True, default='')
+    category = models.CharField(max_length=100, blank=True, default='')
     thumbnail = models.ImageField(upload_to='thumbnails/', blank=True, null=True)
-    category = models.CharField(max_length=100, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
  
     class Meta:
         ordering = ['-created_at']
@@ -24,27 +25,14 @@ class Video(models.Model):
         return self.title
  
  
-class FileUpload(models.Model):
-    """Represents an uploaded video file with metadata."""
- 
-    file = models.FileField(upload_to='uploads/')
-    title = models.CharField(max_length=255, default='')
-    description = models.TextField(blank=True, default='')
-    category = models.CharField(max_length=100, blank=True, default='')
-    uploaded_at = models.DateTimeField(auto_now_add=True)
-    video = models.OneToOneField(Video, null=True, blank=True, on_delete=models.SET_NULL, related_name='upload')
- 
-    def __str__(self):
-        return self.title
- 
- 
 @receiver(post_delete, sender=Video)
 def delete_video_files(sender, instance, **kwargs):
-    """Deletes HLS files, thumbnail and upload folder when a Video is deleted."""
-    if instance.thumbnail:
-        thumbnail_path = instance.thumbnail.path
-        if os.path.isfile(thumbnail_path):
-            os.remove(thumbnail_path)
+    """Deletes raw upload, thumbnail and HLS files when a Video is deleted."""
+    if instance.file and os.path.isfile(instance.file.path):
+        os.remove(instance.file.path)
+    if instance.thumbnail and os.path.isfile(instance.thumbnail.path):
+        os.remove(instance.thumbnail.path)
     hls_dir = os.path.join(settings.MEDIA_ROOT, 'videos', str(instance.pk))
     if os.path.isdir(hls_dir):
         shutil.rmtree(hls_dir)
+

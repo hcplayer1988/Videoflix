@@ -1,17 +1,16 @@
 """Admin configuration for upload app."""
  
 from django.contrib import admin
-from .models import FileUpload, Video
+from .models import Video
  
  
-@admin.register(FileUpload)
-class FileUploadAdmin(admin.ModelAdmin):
-    """Admin configuration for the FileUpload model."""
+@admin.register(Video)
+class VideoAdmin(admin.ModelAdmin):
+    """Admin configuration for the Video model."""
  
-    list_display = ['title', 'category', 'uploaded_at']
+    list_display = ['title', 'category', 'created_at']
     list_filter = ['category']
     search_fields = ['title', 'description']
-    ordering = ['-uploaded_at']
-    exclude = ['video']
+    ordering = ['-created_at']
  
  

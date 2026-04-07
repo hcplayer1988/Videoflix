@@ -3,7 +3,6 @@
 import os
 import subprocess
 from django.conf import settings
-from django.core.files import File
  
  
 RESOLUTIONS = {
@@ -35,7 +34,7 @@ def build_ffmpeg_command(input_path, output_dir, resolution):
  
  
 def generate_thumbnail(video_id, input_path):
-    """Generates a thumbnail from the video and saves it directly to the correct path."""
+    """Generates a thumbnail from the video and saves the path to the Video object."""
     from upload_app.models import Video
     thumbnail_dir = os.path.join(settings.MEDIA_ROOT, 'thumbnails')
     os.makedirs(thumbnail_dir, exist_ok=True)
