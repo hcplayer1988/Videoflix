@@ -52,7 +52,7 @@ A Django REST Framework backend for a Netflix-like video streaming platform. Fea
 - **Automatic Video Conversion**: Background ffmpeg conversion to 480p, 720p and 1080p
 - **Thumbnail Generation**: Automatic thumbnail extraction via ffmpeg
 - **Automatic Cleanup**: Deleting a video removes all HLS files and thumbnails from the server
-- **HTML Email Templates**: Branded email templates with dark mode support
+- **HTML Email Templates**: Branded email templates with logo and dark mode support
 
 ## Tech Stack
 
@@ -97,15 +97,10 @@ Videoflix/
 │   └── emails/
 │       ├── activation_email.html
 │       └── password_reset_email.html
-├── media/                         # Uploaded files (local mount)
-│   ├── uploads/                   # Raw uploaded videos
-│   ├── videos/                    # HLS converted videos
-│   │   └── <video_id>/
-│   │       ├── 480p/
-│   │       ├── 720p/
-│   │       └── 1080p/
-│   └── thumbnails/                # Generated thumbnails
-├── static/                        # Collected static files
+├── static_src/                    # Source static files (tracked by Git)
+│   └── images/
+│       └── logo.png               # Logo used in email templates
+├── static/                        # Collected static files (generated, not in Git)
 ├── backend.Dockerfile
 ├── backend.entrypoint.sh
 ├── docker-compose.yml
@@ -267,7 +262,7 @@ After saving, the backend automatically:
 | `DEBUG` | Debug mode | `True` / `False` |
 | `ALLOWED_HOSTS` | Comma-separated allowed hosts | `localhost,127.0.0.1` |
 | `FRONTEND_URL` | Frontend base URL for email links | `http://127.0.0.1:5500` |
-| `BACKEND_URL` | Backend base URL | `http://127.0.0.1:8000` |
+| `BACKEND_URL` | Backend base URL for static assets in emails | `http://127.0.0.1:8000` |
 | `DB_NAME` | PostgreSQL database name | `videoflix_db` |
 | `DB_USER` | PostgreSQL user | `videoflix_user` |
 | `DB_PASSWORD` | PostgreSQL password | `your_password` |
@@ -297,7 +292,7 @@ The RQ worker starts automatically in the Docker container and listens on the `d
 
 ### Email Configuration
 
-The project uses HTML email templates with dark mode support. Emails are sent directly (not via queue) for reliability.
+The project uses HTML email templates with a PNG logo and dark mode support. The logo is served from `BACKEND_URL/static/images/logo.png` and must be publicly accessible for email clients to display it. Emails are sent directly (not via queue) for reliability.
 
 Tested SMTP providers: All-inkl, Gmail, Outlook, any standard SMTP server.
 
@@ -560,6 +555,16 @@ docker-compose down
 docker-compose up --build
 ```
 
+### Issue: `permission denied` when starting container on Linux
+
+**Cause:** The `backend.entrypoint.sh` file does not have execute permissions on Linux.
+
+**Solution:**
+```bash
+chmod +x backend.entrypoint.sh
+docker compose up -d
+```
+
 ### Issue: `password authentication failed for user "..."`
 
 **Cause:** Docker still has an old PostgreSQL volume from a previous setup with different credentials.
@@ -571,6 +576,21 @@ docker-compose up --build
 ```
 
 > ⚠️ This deletes all data in the database. You will need to add videos again afterwards.
+
+### Issue: Port 8000 already in use
+
+**Cause:** Another project is already running on port 8000.
+
+**Solution:** Change the port in `docker-compose.yml`:
+```yaml
+ports:
+  - "8010:8000"
+```
+
+Then update your `BACKEND_URL` in `.env` accordingly:
+```env
+BACKEND_URL=http://127.0.0.1:8010
+```
 
 ### Issue: CORS errors in browser
 
@@ -642,6 +662,14 @@ Look for: `Successfully completed upload_app.tasks.convert_to_hls`
 3. Some providers (e.g. Gmail) require an app-specific password instead of your regular password
 4. Check your spam folder
 
+### Issue: Logo not showing in emails
+
+**Cause:** The logo is loaded from `BACKEND_URL/static/images/logo.png`. This URL must be publicly accessible.
+
+**Local development:** The logo will not display in emails when running locally since `http://127.0.0.1:8000` is not reachable by external email clients. This is expected behavior — the logo will display correctly in production.
+
+**Production:** Make sure `BACKEND_URL` in `.env` is set to your public backend URL (e.g. `https://api.yourdomain.com`) and the backend is reachable from the internet.
+
 ---
 
 ## Production Deployment
@@ -655,13 +683,13 @@ DEBUG=False
 
 **2. Update allowed hosts:**
 ```env
-ALLOWED_HOSTS=yourdomain.com,www.yourdomain.com
+ALLOWED_HOSTS=api.yourdomain.com,localhost,127.0.0.1
 ```
 
 **3. Update CORS and CSRF origins:**
 ```env
 CORS_ALLOWED_ORIGINS=https://yourdomain.com
-CSRF_TRUSTED_ORIGINS=https://yourdomain.com
+CSRF_TRUSTED_ORIGINS=https://api.yourdomain.com
 ```
 
 **4. Update URLs:**
@@ -675,12 +703,67 @@ BACKEND_URL=https://api.yourdomain.com
 SECRET_KEY="your-very-long-random-secret-key-here"
 ```
 
-**6. Enable HTTPS settings** in `core/settings.py`:
-```python
-SECURE_SSL_REDIRECT = True
-SESSION_COOKIE_SECURE = True
-CSRF_COOKIE_SECURE = True
+### Docker on Linux Server
+
+On a Linux server, two additional steps are required after cloning:
+
+**Set execute permissions for the entrypoint script:**
+```bash
+chmod +x backend.entrypoint.sh
 ```
+
+**Check if port 8000 is already in use** (e.g. by another project):
+```bash
+sudo ss -tlnp | grep 8000
+```
+
+If port 8000 is taken, change the port in `docker-compose.yml` before starting:
+```yaml
+ports:
+  - "8010:8000"
+```
+
+**Start the containers:**
+```bash
+docker compose up --build -d
+```
+
+### Nginx Reverse Proxy
+
+Use Nginx as a reverse proxy in front of Docker. Key points:
+
+- Set `client_max_body_size 5G` to allow large video uploads
+- Serve media files directly from the Docker volume instead of proxying through Django:
+
+```nginx
+server {
+    server_name api.yourdomain.com;
+    client_max_body_size 5G;
+
+    location /static/ {
+        proxy_pass http://127.0.0.1:8010/static/;
+    }
+
+    location /media/ {
+        alias /var/lib/docker/volumes/videoflix_videoflix_media/_data/;
+    }
+
+    location / {
+        include proxy_params;
+        proxy_pass http://127.0.0.1:8010;
+    }
+}
+```
+
+After configuring Nginx, give it read access to the Docker volume:
+```bash
+sudo chmod o+x /var/lib/docker
+sudo chmod o+x /var/lib/docker/volumes
+sudo chmod o+x /var/lib/docker/volumes/videoflix_videoflix_media
+sudo chown -R www-data:www-data /var/lib/docker/volumes/videoflix_videoflix_media/_data
+```
+
+> ⚠️ These permission commands must be re-run after `docker compose down -v` since that command deletes and recreates the volume.
 
 ---
 
