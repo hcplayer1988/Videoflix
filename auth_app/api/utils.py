@@ -30,10 +30,16 @@ def send_html_email(subject, template_name, context, recipient):
 def send_activation_email(user, uid, token):
     """Sends an HTML activation email directly to the given user."""
     activation_link = f"{settings.FRONTEND_URL}/pages/auth/activate.html?uid={uid}&token={token}"
+    logo_url = f"{settings.BACKEND_URL}/static/images/logo.png"
     send_html_email(
         subject="Activate your Videoflix account",
         template_name="emails/activation_email.html",
-        context={"activation_link": activation_link, "email": user.email},
+        context={
+            "activation_link": activation_link,
+            "email": user.email,
+            "logo_url": logo_url,
+            "site_url": settings.FRONTEND_URL,
+        },
         recipient=user.email,
     )
  
@@ -41,10 +47,16 @@ def send_activation_email(user, uid, token):
 def send_password_reset_email(user, uid, token):
     """Sends an HTML password reset email directly to the given user."""
     reset_link = f"{settings.FRONTEND_URL}/pages/auth/confirm_password.html?uid={uid}&token={token}"
+    logo_url = f"{settings.BACKEND_URL}/static/images/logo.png"
     send_html_email(
         subject="Reset your Videoflix password",
         template_name="emails/password_reset_email.html",
-        context={"reset_link": reset_link, "email": user.email},
+        context={
+            "reset_link": reset_link,
+            "email": user.email,
+            "logo_url": logo_url,
+            "site_url": settings.FRONTEND_URL,
+        },
         recipient=user.email,
     )
  
